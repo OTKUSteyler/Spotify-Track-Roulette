@@ -1,48 +1,74 @@
 import { registerCommand } from "@vendetta/commands";
 import { findByProps, findByStoreName } from "@vendetta/metro";
+import { storage } from "@vendetta/plugin";
+import { FluxDispatcher } from "@vendetta/metro/common";
 
 const messageUtil = findByProps("sendMessage", "editMessage");
 const SpotifyStore = findByStoreName("SpotifyStore");
 
-function getRandomTrack() {
-    if (!SpotifyStore) {
-        return "❌ Spotify store not found. Make sure you're connected to Spotify!";
-    }
+// Initialize storage for track history
+if (!storage.trackHistory) {
+    storage.trackHistory = [];
+}
 
-    // Try to get the user's Spotify activity
-    const activity = SpotifyStore.getActivity();
-    
-    if (!activity) {
-        return "❌ No Spotify activity found. Make sure you're connected to Spotify and have listened to some tracks!";
-    }
+let lastTrackId = null;
 
-    // Get recently played tracks or current track info
-    const recentTracks = SpotifyStore.getPlayHistory?.() || [];
+function trackSpotifyActivity() {
+    const activity = SpotifyStore?.getActivity();
     
-    if (recentTracks.length === 0) {
-        // If no history, use current track
-        if (activity.details && activity.state) {
-            const trackName = activity.details;
-            const artist = activity.state.replace("by ", "");
-            return `🎵 **${trackName}** by ${artist}`;
+    if (!activity) return;
+    
+    const trackId = activity.sync_id || activity.session_id;
+    const trackName = activity.details;
+    const artist = activity.state?.replace("by ", "");
+    const albumArt = activity.assets?.large_image;
+    
+    // Only add if it's a new track and has valid data
+    if (trackId && trackName && artist && trackId !== lastTrackId) {
+        lastTrackId = trackId;
+        
+        const trackData = {
+            id: trackId,
+            name: trackName,
+            artist: artist,
+            timestamp: Date.now()
+        };
+        
+        // Check if track already exists in history
+        const exists = storage.trackHistory.some(t => t.id === trackId);
+        
+        if (!exists) {
+            storage.trackHistory.push(trackData);
+            
+            // Keep only last 200 tracks to avoid too much storage
+            if (storage.trackHistory.length > 200) {
+                storage.trackHistory.shift();
+            }
         }
-        return "❌ No Spotify tracks found in your history!";
     }
+}
 
-    // Pick a random track from history
-    const randomTrack = recentTracks[Math.floor(Math.random() * recentTracks.length)];
+function getRandomTrack() {
+    if (!storage.trackHistory || storage.trackHistory.length === 0) {
+        return "❌ No tracks in history yet! Play some music on Spotify and try again later.";
+    }
     
-    if (randomTrack.name && randomTrack.artist) {
-        return `🎵 **${randomTrack.name}** by ${randomTrack.artist}`;
-    }
-
-    return "❌ Unable to retrieve track information.";
+    const randomTrack = storage.trackHistory[Math.floor(Math.random() * storage.trackHistory.length)];
+    
+    return `🎵 **${randomTrack.name}** by ${randomTrack.artist}`;
 }
 
 let unregisterCommand;
+let activityInterval;
 
 export default {
     onLoad: () => {
+        // Track Spotify activity every 10 seconds
+        activityInterval = setInterval(trackSpotifyActivity, 10000);
+        
+        // Also track immediately
+        trackSpotifyActivity();
+        
         unregisterCommand = registerCommand({
             name: "spotifyroulette",
             displayName: "Spotify Roulette",
@@ -67,6 +93,9 @@ export default {
     onUnload: () => {
         if (unregisterCommand) {
             unregisterCommand();
+        }
+        if (activityInterval) {
+            clearInterval(activityInterval);
         }
     }
 };
