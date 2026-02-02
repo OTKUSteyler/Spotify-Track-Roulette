@@ -1,7 +1,6 @@
 import { registerCommand } from "@vendetta/commands";
 import { findByProps, findByStoreName } from "@vendetta/metro";
 import { storage } from "@vendetta/plugin";
-import { FluxDispatcher } from "@vendetta/metro/common";
 
 const messageUtil = findByProps("sendMessage", "editMessage");
 const SpotifyStore = findByStoreName("SpotifyStore");
@@ -12,6 +11,7 @@ if (!storage.trackHistory) {
 }
 
 let lastTrackId = null;
+let unsubscribe = null;
 
 function trackSpotifyActivity() {
     const activity = SpotifyStore?.getActivity();
@@ -53,20 +53,34 @@ function getRandomTrack() {
         return "❌ No tracks in history yet! Play some music on Spotify and try again later.";
     }
     
-    const randomTrack = storage.trackHistory[Math.floor(Math.random() * storage.trackHistory.length)];
+    // Get current playing track ID to avoid selecting it
+    const currentActivity = SpotifyStore?.getActivity();
+    const currentTrackId = currentActivity?.sync_id || currentActivity?.session_id;
+    
+    // Filter out the currently playing track if we have more than one track
+    let availableTracks = storage.trackHistory;
+    if (storage.trackHistory.length > 1 && currentTrackId) {
+        availableTracks = storage.trackHistory.filter(t => t.id !== currentTrackId);
+    }
+    
+    // If we filtered everything out (only had 1 track and it's playing), use all tracks
+    if (availableTracks.length === 0) {
+        availableTracks = storage.trackHistory;
+    }
+    
+    const randomTrack = availableTracks[Math.floor(Math.random() * availableTracks.length)];
     
     return randomTrack.url;
 }
 
 let unregisterCommand;
-let activityInterval;
 
 export default {
     onLoad: () => {
-        // Track Spotify activity every 10 seconds
-        activityInterval = setInterval(trackSpotifyActivity, 10000);
+        // Subscribe to Spotify store updates instead of using interval
+        unsubscribe = SpotifyStore?.addChangeListener?.(trackSpotifyActivity);
         
-        // Also track immediately
+        // Track immediately on load
         trackSpotifyActivity();
         
         unregisterCommand = registerCommand({
@@ -94,8 +108,8 @@ export default {
         if (unregisterCommand) {
             unregisterCommand();
         }
-        if (activityInterval) {
-            clearInterval(activityInterval);
+        if (unsubscribe) {
+            unsubscribe();
         }
     }
 };
