@@ -3,8 +3,8 @@
     "description": "Type /spotifyroulette in any channel to get a random track!.",
     "authors": [
         {
-            "name": "You!",
-            "id": "YOUR_ID_HERE"
+            "name": "btmc727",
+            "id": "554071670143451176"
         }
     ],
     "main": "src/index.ts",
