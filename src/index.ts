@@ -21,7 +21,6 @@ function trackSpotifyActivity() {
     const trackId = activity.sync_id || activity.session_id;
     const trackName = activity.details;
     const artist = activity.state?.replace("by ", "");
-    const albumArt = activity.assets?.large_image;
     
     // Only add if it's a new track and has valid data
     if (trackId && trackName && artist && trackId !== lastTrackId) {
@@ -31,6 +30,7 @@ function trackSpotifyActivity() {
             id: trackId,
             name: trackName,
             artist: artist,
+            url: `https://open.spotify.com/track/${trackId}`,
             timestamp: Date.now()
         };
         
@@ -55,7 +55,7 @@ function getRandomTrack() {
     
     const randomTrack = storage.trackHistory[Math.floor(Math.random() * storage.trackHistory.length)];
     
-    return `🎵 **${randomTrack.name}** by ${randomTrack.artist}`;
+    return randomTrack.url;
 }
 
 let unregisterCommand;
